@@ -28,23 +28,52 @@ fun main(args: Array<String>) {
             blobData = b.getRaw().newInput()
         }
 
-        if (h.getType().equals("OSMHeader")) {
-            val hb = Osmformat.HeaderBlock.parseFrom(blobData)
-            println("hb: ${hb.getSource()}")
-        } else if (h.getType().equals("OSMData")) {
+        if (h.getType().equals("OSMData")) {
             val pb = Osmformat.PrimitiveBlock.parseFrom(blobData)
-
             pb.getPrimitivegroupList().forEach {
                 message ->
                 message.getWaysList().forEach {
                     way ->
                     if (isPub(way, pb.getStringtable())) {
-                        println("")
+                        //println("")
+
                         for (i in 0..way.getKeysCount() - 1) {
                             val key = pb.getStringtable().getS(way.getKeys(i)).toStringUtf8()
                             val value = pb.getStringtable().getS(way.getVals(i)).toStringUtf8()
 
-                            println("$key = $value")
+                            //println("$key = $value")
+                        }
+
+                        //println("refs: ${way.getRefsList()}")
+                        //println("id=${way.getId()} guid=${way.getInfoOrBuilder().getUid()}")
+                    }
+                }
+                val nodes = message.getNodesList().filter { node -> node.getId()==3671342415 }
+                if (nodes.isNotEmpty()) {
+                    println("FOUND ${nodes.get(0).getLat()}")
+
+                }
+
+                if (message.getDense().getIdCount()>0) {
+                    //if (message.getDense().getIdList().contains(3671342415)) {
+                    var id = message.getDense().getId(0);
+                    var lat = message.getDense().getLat(0);
+                    var lon = message.getDense().getLon(0);
+
+                    if (id==3671342415) {
+                        println(getLatLonString(pb,lat,lon))
+                    }
+
+                    if (message.getDense().getIdCount() > 1) {
+                        for (i in 1..message.getDense().getIdCount() - 1) {
+
+                            id += message.getDense().getId(i)
+                            lat += message.getDense().getLat(i)
+                            lon += message.getDense().getLon(i)
+
+                            if (id==3671342415) {
+                                println(getLatLonString(pb,lat,lon))
+                            }
                         }
                     }
                 }
@@ -52,6 +81,16 @@ fun main(args: Array<String>) {
         }
     }
 
+}
+
+fun getLatLonString(pb:Osmformat.PrimitiveBlock, lat:Long, lon:Long):String {
+    val lat_offset=pb.getLatOffset()
+    val lon_offset=pb.getLonOffset()
+    val granularity=pb.getGranularity()
+    val latitude=.000000001 * (lat_offset + (granularity * lat))
+    val longitude=.000000001 * (lon_offset + (granularity * lon))
+
+    return "latlon: $latitude,$longitude"
 }
 
 fun isPub(way: Osmformat.Way, stringTable: Osmformat.StringTable): Boolean {
