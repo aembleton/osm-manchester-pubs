@@ -1,13 +1,84 @@
 import java.io.DataInputStream
 import java.io.FileInputStream
 import java.io.InputStream
+import java.util.*
 import java.util.zip.InflaterInputStream
 
 /**
  * Created by arthur on 07/08/15.
  */
 
+
+data class Pub(val name:String, val id:Long)
+data class PubLocation(val name:String, val lat:Double, val lon:Double)
+
 fun main(args: Array<String>) {
+
+    val pubs = getPubs()
+    val pubLocations = HashSet<PubLocation>()
+println(pubs.size())
+    val fis = FileInputStream("greater-manchester-latest.osm.pbf")
+    val dis = DataInputStream(fis)
+
+    while (dis.available() > 0) {
+        val len = dis.readInt()
+        val blobHeader = ByteArray(len)
+        dis.read(blobHeader)
+        val h = Fileformat.BlobHeader.parseFrom(blobHeader)
+        val blob = ByteArray(h.getDatasize())
+        dis.read(blob)
+        val b = Fileformat.Blob.parseFrom(blob)
+
+        var blobData: InputStream
+        if (b.hasZlibData()) {
+            blobData = InflaterInputStream(b.getZlibData().newInput())
+        } else {
+            blobData = b.getRaw().newInput()
+        }
+
+        if (h.getType().equals("OSMData")) {
+            val pb = Osmformat.PrimitiveBlock.parseFrom(blobData)
+            val lat_offset = pb.getLatOffset()
+            val lon_offset = pb.getLonOffset()
+            val granularity = pb.getGranularity()
+            pb.getPrimitivegroupList().forEach {
+                message ->
+
+                    if (message.getDense().getIdCount()>0) {
+
+                        var id:Long = 0
+                        var lat:Long = 0
+                        var lon:Long = 0
+
+                        for (i in 0..message.getDense().getIdCount()-1) {
+
+                            id += message.getDense().getId(i)
+                            lat += message.getDense().getLat(i)
+                            lon += message.getDense().getLon(i)
+
+                            val pub = pubs.firstOrNull { p -> p.id == id }
+
+                            if (pub != null) {
+                                val latitude = .000000001 * (lat_offset + (granularity * lat))
+                                val longitude = .000000001 * (lon_offset + (granularity * lon))
+                                pubLocations.add(PubLocation(pub.name, latitude, longitude))
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    pubLocations.forEach {
+        pub ->
+        println(pub.name)
+        println("https://www.google.co.uk/maps/place/${pub.lat},${pub.lon}")
+        println()
+    }
+}
+
+fun getPubs():Set<Pub> {
+    val pubs = HashSet<Pub>()
 
     val fis = FileInputStream("greater-manchester-latest.osm.pbf")
     val dis = DataInputStream(fis)
@@ -35,44 +106,13 @@ fun main(args: Array<String>) {
                 message.getWaysList().forEach {
                     way ->
                     if (isPub(way, pb.getStringtable())) {
-                        //println("")
 
                         for (i in 0..way.getKeysCount() - 1) {
                             val key = pb.getStringtable().getS(way.getKeys(i)).toStringUtf8()
                             val value = pb.getStringtable().getS(way.getVals(i)).toStringUtf8()
 
-                            //println("$key = $value")
-                        }
-
-                        //println("refs: ${way.getRefsList()}")
-                        //println("id=${way.getId()} guid=${way.getInfoOrBuilder().getUid()}")
-                    }
-                }
-                val nodes = message.getNodesList().filter { node -> node.getId()==3671342415 }
-                if (nodes.isNotEmpty()) {
-                    println("FOUND ${nodes.get(0).getLat()}")
-
-                }
-
-                if (message.getDense().getIdCount()>0) {
-                    //if (message.getDense().getIdList().contains(3671342415)) {
-                    var id = message.getDense().getId(0);
-                    var lat = message.getDense().getLat(0);
-                    var lon = message.getDense().getLon(0);
-
-                    if (id==3671342415) {
-                        println(getLatLonString(pb,lat,lon))
-                    }
-
-                    if (message.getDense().getIdCount() > 1) {
-                        for (i in 1..message.getDense().getIdCount() - 1) {
-
-                            id += message.getDense().getId(i)
-                            lat += message.getDense().getLat(i)
-                            lon += message.getDense().getLon(i)
-
-                            if (id==3671342415) {
-                                println(getLatLonString(pb,lat,lon))
+                            if (key == "name") {
+                                pubs.add(Pub(value, way.getRefs(0)))
                             }
                         }
                     }
@@ -81,17 +121,12 @@ fun main(args: Array<String>) {
         }
     }
 
+    dis.close()
+    fis.close()
+
+    return pubs
 }
 
-fun getLatLonString(pb:Osmformat.PrimitiveBlock, lat:Long, lon:Long):String {
-    val lat_offset=pb.getLatOffset()
-    val lon_offset=pb.getLonOffset()
-    val granularity=pb.getGranularity()
-    val latitude=.000000001 * (lat_offset + (granularity * lat))
-    val longitude=.000000001 * (lon_offset + (granularity * lon))
-
-    return "latlon: $latitude,$longitude"
-}
 
 fun isPub(way: Osmformat.Way, stringTable: Osmformat.StringTable): Boolean {
     for (i in 0..way.getKeysCount() - 1) {
