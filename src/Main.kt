@@ -63,18 +63,26 @@ println(pubs.size())
                                 val longitude = .000000001 * (lon_offset + (granularity * lon))
                                 pubLocations.add(PubLocation(pub.name, latitude, longitude))
                             }
+
+                            val keyValNum = message.getDense().getKeysVals(i)
+                            if (keyValNum != 0) {
+                                val keyVal = pb.getStringtable().getS(keyValNum).toStringUtf8()
+                                //println("$id=$keyVal")
+                            }
                         }
                 }
             }
         }
     }
 
-    pubLocations.forEach {
-        pub ->
-        println(pub.name)
-        println("https://www.google.co.uk/maps/place/${pub.lat},${pub.lon}")
-        println()
-    }
+//    pubLocations.forEach {
+//        pub ->
+//        println(pub.name)
+//        println("https://www.google.co.uk/maps/place/${pub.lat},${pub.lon}")
+//        println()
+//    }
+
+    println("${pubLocations.size()} pubs found")
 }
 
 fun getPubs():Set<Pub> {
@@ -117,6 +125,33 @@ fun getPubs():Set<Pub> {
                         }
                     }
                 }
+                message.getNodesList().forEach {
+                    node ->
+                    println("got one")
+                    if (isPub(node, pb.getStringtable())) {
+                        for (i in 0..node.getKeysCount() - 1) {
+                            val key = pb.getStringtable().getS(node.getKeys(i)).toStringUtf8()
+                            val value = pb.getStringtable().getS(node.getVals(i)).toStringUtf8()
+
+                            if (key == "name") {
+                                pubs.add(Pub(value, node.getId()))
+                            }
+                        }
+                    }
+                }
+
+                if (message.getDense().getIdCount()>0) {
+                    for (i in 0..message.getDense().getIdCount()-1) {
+                        val keyValNum = message.getDense().getKeysVals(i)
+                        if (keyValNum != 0) {
+                            val keyVal = pb.getStringtable().getS(keyValNum).toStringUtf8()
+                            if (keyVal == "pub"){
+                                pubs.add(Pub(keyVal, message.getDense().getId(i)))
+                            }
+                        }
+                    }
+                }
+
             }
         }
     }
@@ -127,6 +162,16 @@ fun getPubs():Set<Pub> {
     return pubs
 }
 
+fun isPub(node: Osmformat.Node, stringTable: Osmformat.StringTable): Boolean {
+    for (i in 0..node.getKeysCount() - 1) {
+        val value = stringTable.getS(node.getVals(i)).toStringUtf8().trim().toLowerCase()
+        if (value.equals("pub")) {
+            return true
+        }
+    }
+
+    return false
+}
 
 fun isPub(way: Osmformat.Way, stringTable: Osmformat.StringTable): Boolean {
     for (i in 0..way.getKeysCount() - 1) {
